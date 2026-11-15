@@ -1,0 +1,304 @@
+esphome:
+  name: panasonic-cs223dflw
+  friendly_name: Panasonic CS-223DF-W
+
+esp32:
+  variant: esp32c3
+  framework:
+    type: esp-idf
+
+logger:
+  level: DEBUG
+  baud_rate: 0
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+  manual_ip:
+    static_ip: 192.168.1.84
+    gateway: 192.168.1.1
+    subnet: 255.255.255.0
+
+  ap:
+    ssid: "panasonic-control"
+    password: "12345678"
+
+api:
+  reboot_timeout: 0s
+  encryption:
+    key: "TheyC99XeQcguRhqrwiyxw2J0Bqq5NYS/kpWR0DlMPA="
+
+ota:
+  platform: esphome
+  password: !secret ota_password
+
+web_server:
+  port: 80
+  version: 3
+
+uart:
+  id: uart_panasonic
+  tx_pin: GPIO18
+  rx_pin: GPIO19
+  baud_rate: 2400
+  data_bits: 8
+  parity: NONE
+  stop_bits: 1
+  rx_buffer_size: 256
+
+output:
+  - platform: gpio
+    id: rs485_de_re
+    pin: GPIO21
+
+globals:
+  - id: panasonic_power
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
+  - id: panasonic_mode
+    type: std::string
+    restore_value: no
+    initial_value: '"OFF"'
+
+  - id: panasonic_temp
+    type: float
+    restore_value: no
+    initial_value: "25"
+
+  - id: panasonic_fan
+    type: std::string
+    restore_value: no
+    initial_value: '"Auto"'
+
+  - id: panasonic_swing
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
+  - id: rx_buffer
+    type: std::string
+    restore_value: no
+
+switch:
+  # ==========================================================
+  # ĐIỀU HÒA - ĐIỆN
+  # ==========================================================
+  - platform: template
+    id: panasonic_power_switch
+    name: "Điều hòa - Điện"
+    icon: "mdi:power"
+
+    turn_on_action:
+      - lambda: |-
+          id(rs485_de_re).turn_on();
+          delay(5);
+          std::vector<uint8_t> data = {0xXX, 0xXX, 0xXX}; // TODO: frame BẬT thực tế từ sniffer
+          id(uart_panasonic).write(data);
+          delay(5);
+          id(rs485_de_re).turn_off();
+          id(panasonic_power) = true;
+          ESP_LOGI("PANASONIC", "Sent POWER ON");
+
+    turn_off_action:
+      - lambda: |-
+          id(rs485_de_re).turn_on();
+          delay(5);
+          std::vector<uint8_t> data = {0xXX, 0xXX, 0xXX}; // TODO: frame TẮT thực tế
+          id(uart_panasonic).write(data);
+          delay(5);
+          id(rs485_de_re).turn_off();
+          id(panasonic_power) = false;
+          ESP_LOGI("PANASONIC", "Sent POWER OFF");
+
+  # ==========================================================
+  # ĐIỀU HÒA - SWING
+  # ==========================================================
+  - platform: template
+    id: panasonic_swing_switch
+    name: "Điều hòa - Swing"
+    icon: "mdi:air-balancer"
+
+    turn_on_action:
+      - lambda: |-
+          id(rs485_de_re).turn_on();
+          delay(5);
+          std::vector<uint8_t> data = {0xXX, 0xXX, 0xXX}; // TODO: frame SWING ON
+          id(uart_panasonic).write(data);
+          delay(5);
+          id(rs485_de_re).turn_off();
+          id(panasonic_swing) = true;
+
+    turn_off_action:
+      - lambda: |-
+          id(rs485_de_re).turn_on();
+          delay(5);
+          std::vector<uint8_t> data = {0xXX, 0xXX, 0xXX}; // TODO: frame SWING OFF
+          id(uart_panasonic).write(data);
+          delay(5);
+          id(rs485_de_re).turn_off();
+          id(panasonic_swing) = false;
+
+select:
+  # ==========================================================
+  # ĐIỀU HÒA - CHẾ ĐỘ
+  # ==========================================================
+  - platform: template
+    id: panasonic_mode_select
+    name: "Điều hòa - Chế độ"
+    options:
+      - "Tự động"
+      - "Làm mát"
+      - "Sưởi"
+      - "Giữ ấm"
+      - "Quạt"
+    initial_option: "Tự động"
+
+    lambda: |-
+      return id(panasonic_mode);
+
+    action:
+      - lambda: |-
+          std::string mode = x;
+          id(rs485_de_re).turn_on();
+          delay(5);
+          if (mode == "Làm mát") {
+            std::vector<uint8_t> data = {0xXX, 0xXX, 0xXX}; // TODO: COOL
+            id(uart_panasonic).write(data);
+          } else if (mode == "Sưởi") {
+            std::vector<uint8_t> data = {0xXX, 0xXX, 0xXX}; // TODO: HEAT
+            id(uart_panasonic).write(data);
+          } else if (mode == "Giữ ấm") {
+            std::vector<uint8_t> data = {0xXX, 0xXX, 0xXX}; // TODO: DRY
+            id(uart_panasonic).write(data);
+          } else if (mode == "Quạt") {
+            std::vector<uint8_t> data = {0xXX, 0xXX, 0xXX}; // TODO: FAN
+            id(uart_panasonic).write(data);
+          } else {
+            std::vector<uint8_t> data = {0xXX, 0xXX, 0xXX}; // TODO: AUTO
+            id(uart_panasonic).write(data);
+          }
+          delay(5);
+          id(rs485_de_re).turn_off();
+          id(panasonic_mode) = mode;
+          ESP_LOGI("PANASONIC", "Sent MODE %s", mode.c_str());
+
+  # ==========================================================
+  # ĐIỀU HÒA - GIÓ
+  # ==========================================================
+  - platform: template
+    id: panasonic_fan_select
+    name: "Điều hòa - Gió"
+    options:
+      - "Tự động"
+      - "Thấp"
+      - "Trung bình"
+      - "Cao"
+      - "Tăng lực"
+    initial_option: "Tự động"
+
+    lambda: |-
+      return id(panasonic_fan);
+
+    action:
+      - lambda: |-
+          std::string fan = x;
+          id(rs485_de_re).turn_on();
+          delay(5);
+          std::vector<uint8_t> data = {0xXX, 0xXX, 0xXX}; // TODO: frame gió thực tế
+          id(uart_panasonic).write(data);
+          delay(5);
+          id(rs485_de_re).turn_off();
+          id(panasonic_fan) = fan;
+
+number:
+  # ==========================================================
+  # ĐIỀU HÒA - NHIỆT ĐỘ
+  # ==========================================================
+  - platform: template
+    id: panasonic_temp_number
+    name: "Điều hòa - Nhiệt độ"
+    min_value: 17
+    max_value: 30
+    step: 1
+    initial_value: 25
+
+    lambda: |-
+      return id(panasonic_temp);
+
+    set_action:
+      - lambda: |-
+          float t = x;
+          id(rs485_de_re).turn_on();
+          delay(5);
+          // TODO:Thay bằng frame nhiệt độ thực tế (thường là 1 byte chứa giá trị)
+          std::vector<uint8_t> data = {0xXX, 0xXX, 0xXX, (uint8_t)t};
+          id(uart_panasonic).write(data);
+          delay(5);
+          id(rs485_de_re).turn_off();
+          id(panasonic_temp) = t;
+          ESP_LOGI("PANASONIC", "Sent TEMP %.0f", t);
+
+sensor:
+  - platform: template
+    id: panasonic_temp_sensor
+    name: "Điều hòa - Nhiệt độ"
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    lambda: |-
+      return id(panasonic_temp);
+
+text_sensor:
+  - platform: template
+    id: panasonic_status_text
+    name: "Điều hòa - Trạng thái"
+    lambda: |-
+      return id(panasonic_mode) + " | " + (id(panasonic_power) ? "BẬT" : "TẮT") + " | " + id(panasonic_temp) + "°C";
+
+  - platform: template
+    id: panasonic_raw_rx
+    name: "Điều hòa - Raw RX"
+    lambda: |-
+      return id(rx_buffer);
+
+interval:
+  # ==========================================================
+  # NHẬN + PHẢN HỒI 2 CHIỀU
+  # ==========================================================
+  - interval: 100ms
+    then:
+      - lambda: |-
+          while (id(uart_panasonic).available()) {
+            uint8_t b = id(uart_panasonic).read();
+            char tmp[8];
+            snprintf(tmp, sizeof(tmp), "%02X ", b);
+            id(rx_buffer) += tmp;
+
+            // TODO: Viết parser thực tế theo frame Panasonic bạn đã quét
+            // Ví dụ cấu trúc giả định, PHẢI THAY THEO THỰC TẾ:
+            //
+            // static uint8_t frame[64];
+            // static int pos = 0;
+            // frame[pos++] = b;
+            // if (pos >= 5 && frame[0] == 0xAA && frame[pos-1] == 0xEE) {
+            //   if (frame[2] == 0x01) { // status frame
+            //     id(panasonic_power) = (frame[3] & 0x01);
+            //     id(panasonic_temp) = frame[4];
+            //     id(panasonic_mode) = ...;
+            //     id(panasonic_status_text).publish_state(...);
+            //     id(panasonic_temp_sensor).publish_state(...);
+            //   }
+            //   pos = 0;
+            // }
+          }
+
+  - interval: 5s
+    then:
+      - lambda: |-
+          if (!id(rx_buffer).empty()) {
+            id(panasonic_raw_rx).publish_state(id(rx_buffer));
+            id(rx_buffer) = "";
+          }
